@@ -8,6 +8,7 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
 # 0. 페이지 설정
@@ -242,19 +243,40 @@ def get_summary(result_df):
         return "🟢 종합 허용 — 전원 허용 판정", "allow"
 
 # ─────────────────────────────────────────────
-# 6. 심사 기록 저장/불러오기 (세션 영구 누적)
+# 6. Supabase 연결 및 기록 저장/불러오기
 # ─────────────────────────────────────────────
-RECORD_FILE = "심사기록.json"
+@st.cache_resource
+def get_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
 def load_records():
-    if os.path.exists(RECORD_FILE):
-        with open(RECORD_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    try:
+        sb = get_supabase()
+        res = sb.table("records").select("*").order("id", desc=True).execute()
+        return res.data if res.data else []
+    except Exception as e:
+        st.error(f"기록 불러오기 실패: {e}")
+        return []
 
-def save_records(records):
-    with open(RECORD_FILE, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
+def save_records(record: dict):
+    try:
+        sb = get_supabase()
+        sb.table("records").insert(record).execute()
+        return True
+    except Exception as e:
+        st.error(f"기록 저장 실패: {e}")
+        return False
+
+def delete_all_records():
+    try:
+        sb = get_supabase()
+        sb.table("records").delete().neq("id", 0).execute()
+        return True
+    except Exception as e:
+        st.error(f"초기화 실패: {e}")
+        return False
 
 # ─────────────────────────────────────────────
 # 7. UI 메인
@@ -403,10 +425,8 @@ with tab1:
                 "비고":           remark or "-",
                 "심사담당자":     reviewer or "-",
             }
-            records = load_records()
-            records.append(new_rec)
-            save_records(records)
-            st.success("✅ 기록이 저장되었습니다! '심사 기록 보드' 탭에서 확인하세요.")
+            if save_records(new_rec):
+                st.success("✅ 기록이 저장되었습니다! '심사 기록 보드' 탭에서 확인하세요.")
 
 # ══════════════════════════════════════════════
 # TAB 2 — 심사 기록 보드
@@ -419,7 +439,6 @@ with tab2:
         st.info("아직 저장된 심사 기록이 없습니다. 겸업 심사 탭에서 기록을 저장해주세요.")
     else:
         records_df = pd.DataFrame(records)
-        # 컬럼 순서 정렬
         col_order = ["심사일자", "성명", "호칭", "겸업내용", "겸업기간",
                      "AI심사종합결과", "최종결과", "비고", "심사담당자"]
         records_df = records_df[[c for c in col_order if c in records_df.columns]]
@@ -446,5 +465,6 @@ with tab2:
 
         # 기록 초기화
         if st.button("🗑️ 전체 기록 초기화", type="secondary"):
-            save_records([])
-            st.rerun()
+            if delete_all_records():
+                st.success("초기화 완료!")
+                st.rerun()
