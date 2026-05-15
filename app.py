@@ -306,11 +306,21 @@ with st.spinner("AI 모델 준비 중..."):
 # 사이드바: 기본 정보
 with st.sidebar:
     st.header("📋 심사 기본 정보")
-    emp_name   = st.text_input("성명", placeholder="홍길동")
-    emp_dept   = st.text_input("부서", placeholder="인사팀")
-    emp_pos    = st.text_input("직급", placeholder="팀장")
-    side_job   = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
+    emp_name    = st.text_input("성명", placeholder="홍길동")
+    emp_dept    = st.text_input("부서", placeholder="인사팀")
+    emp_pos     = st.text_input("호칭", placeholder="매니저")
+    side_job    = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
     review_date = st.date_input("심사 일자")
+    st.markdown("**겸업 기간**")
+    col_s, col_e = st.columns(2)
+    with col_s:
+        period_start = st.date_input("시작일", key="period_start", label_visibility="collapsed")
+    with col_e:
+        period_end   = st.date_input("종료일", key="period_end",   label_visibility="collapsed")
+    if period_start > period_end:
+        st.warning("⚠️ 종료일이 시작일보다 앞서 있어요.")
+    elif period_start == period_end:
+        st.caption("📅 당일 겸업 (시작일 = 종료일)")
     st.divider()
     st.caption("※ 본 시스템은 AI 보조 도구이며\n최종 판단은 HR 담당자가 수행합니다.")
 
@@ -362,11 +372,12 @@ if run:
 
         # 기본 정보 출력
         if emp_name or emp_dept:
-            info_cols = st.columns(4)
+            info_cols = st.columns(5)
             with info_cols[0]: st.metric("성명", emp_name or "-")
             with info_cols[1]: st.metric("부서", emp_dept or "-")
-            with info_cols[2]: st.metric("직급", emp_pos or "-")
+            with info_cols[2]: st.metric("호칭", emp_pos or "-")
             with info_cols[3]: st.metric("겸업 내용", side_job or "-")
+            with info_cols[4]: st.metric("겸업 기간", f"{period_start} ~ {period_end}")
             st.divider()
 
         # 종합 의견
@@ -416,3 +427,56 @@ if run:
             file_name=f"겸업심사결과_{emp_name or '미입력'}_{review_date}.csv",
             mime="text/csv",
         )
+
+        # ── 심사 기록 보드 ──────────────────────────────
+        st.markdown("---")
+        st.markdown("## 📋 심사 기록 보드")
+        st.caption("AI 예측 결과를 참고하여 HR 담당자가 최종 판단을 기록해주세요.")
+
+        with st.form("record_form"):
+            rec_cols = st.columns([1, 1])
+            with rec_cols[0]:
+                final_decision = st.radio(
+                    "최종 결과",
+                    options=["✅ 허용", "❌ 비허용", "🟡 조건부 허용"],
+                    index=0,
+                )
+            with rec_cols[1]:
+                reviewer = st.text_input("심사담당자 성명", placeholder="김인사")
+            remark = st.text_area("비고", placeholder="예) 겸업 기간 한정 허용, 분기별 재심사 조건 등", height=80)
+            submitted = st.form_submit_button("💾 기록 저장", use_container_width=True, type="primary")
+
+        if "records" not in st.session_state:
+            st.session_state.records = []
+
+        if submitted:
+            st.session_state.records.append({
+                "성명":           emp_name or "-",
+                "호칭":           emp_pos or "-",
+                "겸업내용":       side_job or "-",
+                "겸업기간":       f"{period_start} ~ {period_end}",
+                "AI심사종합결과": summary_text,
+                "최종결과":       final_decision,
+                "비고":           remark or "-",
+                "심사담당자":     reviewer or "-",
+            })
+            st.success("✅ 기록이 저장되었습니다!")
+
+        # 기록 목록 표시
+        if st.session_state.records:
+            st.markdown("### 📑 누적 심사 기록")
+            records_df = pd.DataFrame(st.session_state.records)
+            st.dataframe(records_df, use_container_width=True, hide_index=True)
+
+            # 기록 CSV 다운로드
+            rec_csv = records_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+            st.download_button(
+                label="📥 심사 기록 전체 다운로드",
+                data=rec_csv,
+                file_name=f"겸업심사_기록부_{review_date}.csv",
+                mime="text/csv",
+            )
+            # 기록 초기화
+            if st.button("🗑️ 기록 전체 초기화"):
+                st.session_state.records = []
+                st.rerun()
