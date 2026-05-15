@@ -510,15 +510,8 @@ with tab2:
 
         st.markdown("---")
 
-        # 버튼 (작게)
-        st.markdown("""
-        <style>
-        div[data-testid="stHorizontalBlock"] button[kind="primaryFormSubmit"],
-        .small-btn button { font-size: 0.7rem !important; padding: 0.2rem 0.4rem !important; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        _, b1, _, b2, _, b3, _ = st.columns([2,1,0.2,1,0.2,1,2])
+        # 버튼 우측 정렬 + 작은 사이즈
+        _, _, _, b1, b2, b3 = st.columns([3, 1, 0.1, 0.7, 0.7, 0.7])
         with b1:
             del_btn = st.button("🗑️ 선택 삭제", type="primary", use_container_width=True)
         with b2:
