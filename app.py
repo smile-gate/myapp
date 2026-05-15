@@ -247,14 +247,18 @@ def get_summary(result_df):
 # ─────────────────────────────────────────────
 @st.cache_resource
 def get_supabase() -> Client:
+    import os
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
+    # 인코딩 문제 방지
+    url = url.encode("ascii", "ignore").decode("ascii") if isinstance(url, str) else url
+    key = key.encode("ascii", "ignore").decode("ascii") if isinstance(key, str) else key
     return create_client(url, key)
 
 def load_records():
     try:
         sb = get_supabase()
-        res = sb.table("records").select("*").order("id", desc=True).execute()
+        res = sb.table("Records").select("*").order("id", desc=True).execute()
         return res.data if res.data else []
     except Exception as e:
         st.error(f"기록 불러오기 실패: {e}")
@@ -263,7 +267,7 @@ def load_records():
 def save_records(record: dict):
     try:
         sb = get_supabase()
-        sb.table("records").insert(record).execute()
+        sb.table("Records").insert(record).execute()
         return True
     except Exception as e:
         st.error(f"기록 저장 실패: {e}")
@@ -272,7 +276,7 @@ def save_records(record: dict):
 def delete_all_records():
     try:
         sb = get_supabase()
-        sb.table("records").delete().neq("id", 0).execute()
+        sb.table("Records").delete().neq("id", 0).execute()
         return True
     except Exception as e:
         st.error(f"초기화 실패: {e}")
