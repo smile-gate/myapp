@@ -192,8 +192,8 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
         "진단항목34": "일회성 소득으로 지속적 겸업 구조 아님",
         "진단항목7":  "봉사·취미 등 비영리적 개인 활동",
         "진단항목5":  "일회성 외부 출강으로 정기 겸업과 구분됨",
-        "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
-        "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
+        "진단항목8":  "CCL(Creative Challengers League) 활동으로 회사 승인 프로그램 해당",
+        "진단항목9":  "CCL(Creative Challengers League)연계 부속활동으로 회사 인정 범위 내 활동",
     }
 
     detected_risks = [(k, v) for k, v in risk_map.items() if values.get(k, 0) == 1]
@@ -203,7 +203,7 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
 
     # ── CCL 허용 케이스 특별 처리 ──
     if is_ccl and prediction == 1:
-        ccl_base = "CCL(크리에이티브 챌린저스 리그)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
+        ccl_base = "CCL(Creative Challengers League)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
         safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
         return f"{ccl_base}\n· {safe_detail}"
 
