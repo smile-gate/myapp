@@ -120,11 +120,11 @@ def load_or_train_models():
     X = df[FEATURE_COLS].fillna(0).astype(int)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     models = {
-        "Random Forest":      RandomForestClassifier(n_estimators=200, random_state=42),
+        "Random Forest":       RandomForestClassifier(n_estimators=200, random_state=42),
         "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
-        "Neural Network":     MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
-        "SVM":                SVC(probability=True, random_state=42),
-        "Gradient Boosting":  GradientBoostingClassifier(n_estimators=200, random_state=42),
+        "Neural Network":      MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
+        "SVM":                 SVC(probability=True, random_state=42),
+        "Gradient Boosting":   GradientBoostingClassifier(n_estimators=200, random_state=42),
     }
     trained = {}
     for name, m in models.items():
@@ -165,8 +165,7 @@ def generate_reason(model_name, values, prediction, proba):
         "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
         "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
-    # 실제 체크된 항목 기준으로만 필터링
-    checked_keys = {k for k, v in values.items() if v == 1}
+    checked_keys   = {k for k, v in values.items() if v == 1}
     detected_risks = [desc for k, desc in risk_map.items() if k in checked_keys]
     detected_safe  = [desc for k, desc in safe_map.items() if k in checked_keys]
     risk_cnt = len(detected_risks)
@@ -179,24 +178,24 @@ def generate_reason(model_name, values, prediction, proba):
 
     if prediction == 0:
         base_map = {
-            "Random Forest":      f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치",
+            "Random Forest":       f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치",
             "Logistic Regression": f"위험 변수들의 누적 가중치가 허용 임계값을 초과 (감지된 위험지표 {risk_cnt}개)",
-            "Neural Network":     f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출",
-            "SVM":                f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)",
-            "Gradient Boosting":  "단계적 부스팅 분석 결과 비허용 특성 패턴이 강하게 감지됨",
+            "Neural Network":      f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출",
+            "SVM":                 f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)",
+            "Gradient Boosting":   "단계적 부스팅 분석 결과 비허용 특성 패턴이 강하게 감지됨",
         }
-        base = base_map.get(model_name, "비허용 패턴 감지")
+        base   = base_map.get(model_name, "비허용 패턴 감지")
         detail = "\n· ".join(detected_risks) if detected_risks else "복합적 위험 요인의 조합이 비허용 기준에 해당"
         return f"{base}\n· {detail}"
     else:
         base_map = {
-            "Random Forest":      f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)",
+            "Random Forest":       f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)",
             "Logistic Regression": "위험 변수의 가중합이 허용 범위 내에 있으며 주요 위험 요인 미해당",
-            "Neural Network":     f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출",
-            "SVM":                "결정 경계 분석 결과 허용 영역으로 분류",
-            "Gradient Boosting":  "단계적 부스팅 분석 결과 허용 패턴이 우세하게 감지됨",
+            "Neural Network":      f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출",
+            "SVM":                 "결정 경계 분석 결과 허용 영역으로 분류",
+            "Gradient Boosting":   "단계적 부스팅 분석 결과 허용 패턴이 우세하게 감지됨",
         }
-        base = base_map.get(model_name, "허용 패턴 감지")
+        base   = base_map.get(model_name, "허용 패턴 감지")
         detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
         return f"{base}\n· {detail}"
 
@@ -210,10 +209,10 @@ def predict_all(model_data, input_values):
     for name, info in model_data["models"].items():
         m = info["model"]
         pred = int(m.predict(X)[0])
-        proba_arr = m.predict_proba(X)[0]
+        proba_arr  = m.predict_proba(X)[0]
         allow_prob = proba_arr[allow_class]
         deny_prob  = 1 - allow_prob
-        label = "✅ 허용" if pred == allow_class else "❌ 비허용"
+        label  = "✅ 허용" if pred == allow_class else "❌ 비허용"
         reason = generate_reason(name, input_values, 1 if pred == allow_class else 0, allow_prob)
         rows.append({
             "모델": name, "판정": label,
@@ -247,24 +246,22 @@ def get_summary(result_df):
 # ─────────────────────────────────────────────
 @st.cache_resource
 def get_supabase() -> Client:
-    import os
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
-    # 인코딩 문제 방지
     url = url.encode("ascii", "ignore").decode("ascii") if isinstance(url, str) else url
     key = key.encode("ascii", "ignore").decode("ascii") if isinstance(key, str) else key
     return create_client(url, key)
 
 def load_records():
     try:
-        sb = get_supabase()
+        sb  = get_supabase()
         res = sb.table("Records").select("*").order("id", desc=True).execute()
         return res.data if res.data else []
     except Exception as e:
         st.error(f"기록 불러오기 실패: {e}")
         return []
 
-def save_records(record: dict):
+def insert_record(record: dict):
     try:
         sb = get_supabase()
         sb.table("Records").insert(record).execute()
@@ -288,23 +285,20 @@ def delete_all_records():
 st.markdown('<div class="main-title">🏢 겸업 심사 AI 예측 시스템</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">HR 담당자용 · 5개 AI 모델 동시 예측 · 겸업 허용/비허용 판단 지원</div>', unsafe_allow_html=True)
 
-# 모델 로드
 with st.spinner("AI 모델 준비 중..."):
     try:
         model_data = load_or_train_models()
         st.success("✅ 5개 모델 준비 완료")
     except Exception as e:
-        st.error(f"모델 로드 실패: {e}\n\n`학습데이터.csv` 파일이 앱과 같은 폴더에 있는지 확인해주세요.")
+        st.error(f"모델 로드 실패: {e}")
         st.stop()
 
-# 탭 구성
 tab1, tab2 = st.tabs(["🔍 겸업 심사", "📋 심사 기록 보드"])
 
 # ══════════════════════════════════════════════
 # TAB 1 — 겸업 심사
 # ══════════════════════════════════════════════
 with tab1:
-    # 사이드바
     with st.sidebar:
         st.header("📋 심사 기본 정보")
         emp_name    = st.text_input("성명", placeholder="홍길동")
@@ -342,21 +336,43 @@ with tab1:
                            label_visibility="collapsed", horizontal=True)
         input_values[col_id] = 1 if val == "예" else 0
 
-    # 예측 버튼
     st.markdown("---")
     _, btn_col, _ = st.columns([1, 2, 1])
     with btn_col:
         run = st.button("🔍 5개 모델 동시 예측 실행", use_container_width=True, type="primary")
 
+    # 예측 실행 → session_state 저장
     if run:
         with st.spinner("AI 모델 분석 중..."):
             result_df = predict_all(model_data, input_values)
             summary_text, summary_type = get_summary(result_df)
+        st.session_state["result_df"]    = result_df
+        st.session_state["summary_text"] = summary_text
+        st.session_state["summary_type"] = summary_type
+        st.session_state["emp_name"]     = emp_name
+        st.session_state["emp_dept"]     = emp_dept
+        st.session_state["emp_pos"]      = emp_pos
+        st.session_state["side_job"]     = side_job
+        st.session_state["review_date"]  = review_date
+        st.session_state["period_start"] = period_start
+        st.session_state["period_end"]   = period_end
+
+    # 결과 표시 (session_state 기반 → 기록 저장 후에도 유지)
+    if "result_df" in st.session_state:
+        result_df    = st.session_state["result_df"]
+        summary_text = st.session_state["summary_text"]
+        summary_type = st.session_state["summary_type"]
+        emp_name     = st.session_state["emp_name"]
+        emp_dept     = st.session_state["emp_dept"]
+        emp_pos      = st.session_state["emp_pos"]
+        side_job     = st.session_state["side_job"]
+        review_date  = st.session_state["review_date"]
+        period_start = st.session_state["period_start"]
+        period_end   = st.session_state["period_end"]
 
         st.markdown("---")
         st.markdown("## 📊 예측 결과")
 
-        # 기본 정보 (작은 바 형태)
         st.markdown(f"""
         <div class="info-bar">
             <span><b>성명</b>{emp_name or '-'}</span>
@@ -367,7 +383,6 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # 종합 의견
         if summary_type == "deny":
             st.markdown(f'<div class="deny-box">{summary_text}</div>', unsafe_allow_html=True)
         elif summary_type == "caution":
@@ -375,26 +390,22 @@ with tab1:
         else:
             st.markdown(f'<div class="allow-box">{summary_text}</div>', unsafe_allow_html=True)
 
-        # 모델별 결과 테이블
         st.markdown("### 🤖 모델별 판정 결과")
         display_df = result_df[["모델", "판정", "허용 확률", "비허용 확률", "정확도(테스트셋)"]].copy()
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        # 판단 근거
         st.markdown("### 💬 모델별 판단 근거")
         for _, row in result_df.iterrows():
             icon = "🟢" if "비" not in row["판정"] else "🔴"
             with st.expander(f"{icon} {row['모델']} — {row['판정']}  ({row['허용 확률']} 허용 확률)"):
                 st.text(row["판단 근거"])
 
-        # 예 응답 요약
         yes_items = [(cid, q) for (_, cid, q) in ITEMS if input_values.get(cid, 0) == 1]
         if yes_items:
             with st.expander(f"📋 '예' 응답 항목 요약 ({len(yes_items)}개)"):
                 for cid, q in yes_items:
                     st.markdown(f"- **{cid}**: {q}")
 
-        # 결과 CSV 다운로드
         st.markdown("---")
         export_df = result_df[["모델", "판정", "허용 확률", "비허용 확률", "판단 근거"]].copy()
         export_df.loc[len(export_df)] = ["[종합]", summary_text, "", "", ""]
@@ -403,10 +414,11 @@ with tab1:
                            file_name=f"겸업심사결과_{emp_name or '미입력'}_{review_date}.csv",
                            mime="text/csv")
 
-        # ── 심사 기록 저장 폼 ──
+        # ── 최종 판단 기록 저장 ──
         st.markdown("---")
         st.markdown("## 📋 최종 판단 기록")
         st.caption("AI 예측 결과를 참고하여 HR 담당자가 최종 판단을 입력 후 저장해주세요.")
+
         with st.form("record_form"):
             rc1, rc2 = st.columns([1, 1])
             with rc1:
@@ -414,22 +426,22 @@ with tab1:
                     options=["✅ 허용", "❌ 비허용", "🟡 조건부 허용"], index=0)
             with rc2:
                 reviewer = st.text_input("심사담당자 성명", placeholder="김인사")
-            remark = st.text_area("비고", placeholder="예) 겸업 기간 한정 허용, 분기별 재심사 조건 등", height=80)
+            remark   = st.text_area("비고", placeholder="예) 겸업 기간 한정 허용, 분기별 재심사 조건 등", height=80)
             save_btn = st.form_submit_button("💾 기록 저장", use_container_width=True, type="primary")
 
         if save_btn:
             new_rec = {
-                "review_date": str(review_date),
-                "name":        emp_name or "-",
-                "title":       emp_pos or "-",
-                "job_content": side_job or "-",
-                "job_period":  f"{period_start} ~ {period_end}",
-                "ai_result":   summary_text,
+                "review_date":  str(review_date),
+                "name":         emp_name or "-",
+                "title":        emp_pos or "-",
+                "job_content":  side_job or "-",
+                "job_period":   f"{period_start} ~ {period_end}",
+                "ai_result":    summary_text,
                 "final_result": final_decision,
-                "remark":      remark or "-",
-                "reviewer":    reviewer or "-",
+                "remark":       remark or "-",
+                "reviewer":     reviewer or "-",
             }
-            if save_records(new_rec):
+            if insert_record(new_rec):
                 st.success("✅ 기록이 저장되었습니다! '심사 기록 보드' 탭에서 확인하세요.")
 
 # ══════════════════════════════════════════════
@@ -437,13 +449,16 @@ with tab1:
 # ══════════════════════════════════════════════
 with tab2:
     st.markdown("### 📑 누적 심사 기록")
+
+    if st.button("🔄 새로고침"):
+        st.rerun()
+
     records = load_records()
 
     if not records:
         st.info("아직 저장된 심사 기록이 없습니다. 겸업 심사 탭에서 기록을 저장해주세요.")
     else:
         records_df = pd.DataFrame(records)
-        # 영문 컬럼 → 한글 표시로 변환
         col_rename = {
             "review_date":  "심사일자",
             "name":         "성명",
@@ -455,31 +470,23 @@ with tab2:
             "remark":       "비고",
             "reviewer":     "심사담당자",
         }
-        col_order = list(col_rename.keys())
+        col_order  = list(col_rename.keys())
         records_df = records_df[[c for c in col_order if c in records_df.columns]]
         records_df = records_df.rename(columns=col_rename)
         st.dataframe(records_df, use_container_width=True, hide_index=True)
 
-        # 통계 요약
         st.markdown("---")
         st.markdown("#### 📊 심사 통계")
-        stat_cols = st.columns(3)
-        with stat_cols[0]:
-            st.metric("전체 심사 건수", len(records_df))
-        with stat_cols[1]:
-            allow_n = records_df["최종결과"].str.contains("허용").sum()
-            st.metric("허용", allow_n)
-        with stat_cols[2]:
-            deny_n = records_df["최종결과"].str.contains("비허용").sum()
-            st.metric("비허용", deny_n)
+        s1, s2, s3 = st.columns(3)
+        with s1: st.metric("전체 심사 건수", len(records_df))
+        with s2: st.metric("허용", records_df["최종결과"].str.contains("허용").sum())
+        with s3: st.metric("비허용", records_df["최종결과"].str.contains("비허용").sum())
 
-        # 전체 기록 다운로드
         st.markdown("---")
         rec_csv = records_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
         st.download_button("📥 전체 기록 CSV 다운로드", data=rec_csv,
                            file_name="겸업심사_기록부.csv", mime="text/csv")
 
-        # 기록 초기화
         if st.button("🗑️ 전체 기록 초기화", type="secondary"):
             if delete_all_records():
                 st.success("초기화 완료!")
