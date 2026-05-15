@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
-import os
+import pickle, os, json, time
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
@@ -28,24 +27,33 @@ st.markdown("""
         background:#1a3a5c; color:white; padding:0.4rem 0.8rem;
         border-radius:6px; font-weight:600; margin:1rem 0 0.5rem 0;
     }
+    .info-bar {
+        background:#f8f9fa; border-radius:8px; padding:0.5rem 1rem;
+        margin-bottom:0.8rem; font-size:0.82rem; display:flex;
+        gap:1.5rem; flex-wrap:wrap; color:#333;
+    }
+    .info-bar b {color:#1a3a5c; margin-right:0.2rem;}
     .allow-box {
         background:#e6f4ea; border-left:5px solid #34a853;
-        padding:1rem; border-radius:6px; font-size:1.1rem; font-weight:600; color:#1e7e34;
+        padding:0.8rem 1rem; border-radius:6px; font-size:1rem;
+        font-weight:600; color:#1e7e34; margin:0.5rem 0;
     }
     .deny-box {
         background:#fce8e6; border-left:5px solid #ea4335;
-        padding:1rem; border-radius:6px; font-size:1.1rem; font-weight:600; color:#c0392b;
+        padding:0.8rem 1rem; border-radius:6px; font-size:1rem;
+        font-weight:600; color:#c0392b; margin:0.5rem 0;
     }
     .caution-box {
         background:#fff8e1; border-left:5px solid #fbbc04;
-        padding:1rem; border-radius:6px; font-size:1.1rem; font-weight:600; color:#856404;
+        padding:0.8rem 1rem; border-radius:6px; font-size:1rem;
+        font-weight:600; color:#856404; margin:0.5rem 0;
     }
     .stRadio > div {flex-direction:row; gap:1rem;}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# 1. 진단항목 정의 (대항목 + 항목명)
+# 1. 진단항목 정의
 # ─────────────────────────────────────────────
 ITEMS = [
     ("업무형태(타업종사)",   "진단항목1",  "본인의 사업체를 직접 운영하거나 실질적으로 영위하는가?"),
@@ -89,7 +97,6 @@ ITEMS = [
     ("기타",                 "진단항목39", "현재 남성 모성제도 사용중인가? (배우자 출산휴가, 육아휴직 등)"),
     ("기타",                 "진단항목40", "현재 여성 모성제도 사용중인가? (출산휴가, 육아휴직 등)"),
 ]
-
 FEATURE_COLS = [f"진단항목{i}" for i in range(1, 41)]
 
 # ─────────────────────────────────────────────
@@ -99,28 +106,18 @@ MODEL_PATH = "trained_models.pkl"
 
 @st.cache_resource
 def load_or_train_models():
-    """저장된 모델이 있으면 로드, 없으면 학습 후 저장"""
     if os.path.exists(MODEL_PATH):
         with open(MODEL_PATH, "rb") as f:
             return pickle.load(f)
-
-    # 학습 데이터 로드
     try:
         df = pd.read_csv("학습데이터.csv", encoding="utf-8-sig")
     except Exception:
         df = pd.read_csv("학습데이터.csv", encoding="cp949")
-
-    # 결과 컬럼 인코딩 (허용=1, 비허용=0)
     le = LabelEncoder()
     y = le.fit_transform(df["결과"].astype(str))
-    # 허용 클래스 인덱스 확인
     allow_class = list(le.classes_).index("허용") if "허용" in le.classes_ else 1
     X = df[FEATURE_COLS].fillna(0).astype(int)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     models = {
         "Random Forest":      RandomForestClassifier(n_estimators=200, random_state=42),
         "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
@@ -128,64 +125,35 @@ def load_or_train_models():
         "SVM":                SVC(probability=True, random_state=42),
         "Gradient Boosting":  GradientBoostingClassifier(n_estimators=200, random_state=42),
     }
-
     trained = {}
     for name, m in models.items():
         m.fit(X_train, y_train)
         acc = m.score(X_test, y_test)
         trained[name] = {"model": m, "accuracy": round(acc * 100, 1)}
-
-    result = {
-        "models": trained,
-        "le": le,
-        "allow_class": allow_class,
-        "feature_cols": FEATURE_COLS,
-    }
-
+    result = {"models": trained, "le": le, "allow_class": allow_class, "feature_cols": FEATURE_COLS}
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(result, f)
-
     return result
 
 # ─────────────────────────────────────────────
-# 3. 판단 근거 생성 함수
+# 3. 판단 근거 생성
 # ─────────────────────────────────────────────
-def generate_reason(model_name: str, values: dict, prediction: int, proba: float) -> str:
-    """
-    입력값 패턴을 분석하여 모델별 판단 근거를 자연어로 생성
-    """
-
-    # CCL 여부 판단 (8번 또는 9번 해당)
+def generate_reason(model_name, values, prediction, proba):
     is_ccl = values.get("진단항목8", 0) == 1 or values.get("진단항목9", 0) == 1
-
-    # 위험 항목 감지
     risk_map = {
-        "진단항목13": ("평일 코어타임 겸업 활동",
-                      "평일 업무 코어시간과 겸업 시간이 중복되어 본업 집중도에 영향을 줄 수 있음"),
-        "진단항목16": ("정기적 연차 사용",
-                      "겸업을 위해 연차를 정기적으로 활용하는 패턴은 본업 운영에 구조적 부담을 초래할 수 있음"),
-        "진단항목18": ("직무능률 저하 우려",
-                      "겸업 활동이 본업 수행 역량에 실질적인 영향을 미칠 가능성이 있음"),
-        "진단항목19": ("회사 이익 상충 우려",
-                      "겸업 활동의 성격이 회사 이익과 상반되는 방향으로 전개될 여지가 있음"),
-        "진단항목22": ("직무 습득 자산 활용",
-                      "본업을 통해 획득한 기술이나 지식이 겸업에 직접 활용되는 구조로 이해충돌 소지가 있음"),
-        "진단항목23": ("영업비밀 활용 가능성",
-                      "회사의 원천 기술 또는 영업비밀이 겸업 활동에 연계될 우려가 있음"),
-        "진단항목24": ("경쟁업체 연관성",
-                      "동종 업계 또는 경쟁 관계에 있는 업체와의 겸업은 정보 유출 및 이해충돌 위험이 높음"),
-        "진단항목25": ("회사 손실 우려",
-                      "겸업을 통해 생성되는 결과물이나 정보가 회사에 불이익을 줄 가능성이 있음"),
-        "진단항목27": ("회사 자산 활용",
-                      "회사 소유 자산이나 시설이 겸업에 사용될 경우 자산 보호 및 내부 통제 관점에서 문제가 될 수 있음"),
-        "진단항목36": ("타인 명의 운영",
-                      "실질적 운영자와 명의자가 다른 구조는 투명성 측면에서 허용 기준에 부합하지 않음"),
-        "진단항목37": ("이중취업 형태",
-                      "4대보험 취득이 수반되는 이중취업은 취업규칙상 겸업 금지 조항에 직접 저촉됨"),
-        "진단항목38": ("병가/휴직 중 겸업",
-                      "휴직 사유와 겸업 활동 간의 불일치는 휴직 목적에 반하는 행위로 간주될 수 있음"),
+        "진단항목13": "평일 코어타임 겸업 활동으로 본업 집중도에 영향을 줄 수 있음",
+        "진단항목16": "겸업을 위해 연차를 정기적으로 활용하는 패턴은 본업 운영에 구조적 부담을 초래할 수 있음",
+        "진단항목18": "겸업 활동이 본업 수행 역량에 실질적인 영향을 미칠 가능성이 있음",
+        "진단항목19": "겸업 활동의 성격이 회사 이익과 상반되는 방향으로 전개될 여지가 있음",
+        "진단항목22": "본업을 통해 획득한 기술이나 지식이 겸업에 직접 활용되는 구조로 이해충돌 소지가 있음",
+        "진단항목23": "회사의 원천 기술 또는 영업비밀이 겸업 활동에 연계될 우려가 있음",
+        "진단항목24": "동종 업계 또는 경쟁 관계에 있는 업체와의 겸업은 정보 유출 및 이해충돌 위험이 높음",
+        "진단항목25": "겸업을 통해 생성되는 결과물이나 정보가 회사에 불이익을 줄 가능성이 있음",
+        "진단항목27": "회사 소유 자산이나 시설이 겸업에 사용될 경우 자산 보호 관점에서 문제가 될 수 있음",
+        "진단항목36": "실질적 운영자와 명의자가 다른 구조는 투명성 측면에서 허용 기준에 부합하지 않음",
+        "진단항목37": "4대보험 취득이 수반되는 이중취업은 취업규칙상 겸업 금지 조항에 직접 저촉됨",
+        "진단항목38": "휴직 사유와 겸업 활동 간의 불일치는 휴직 목적에 반하는 행위로 간주될 수 있음",
     }
-
     safe_map = {
         "진단항목10": "업무시간 외 활동으로 본업과 시간적 충돌 없음",
         "진단항목14": "주말 중심의 활동으로 평일 업무 영향 최소화",
@@ -195,57 +163,43 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
         "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
         "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
-
-    detected_risks = [(k, v) for k, v in risk_map.items() if values.get(k, 0) == 1]
-    detected_safe  = [v for k, v in safe_map.items() if values.get(k, 0) == 1]
+    detected_risks = [desc for k, desc in risk_map.items() if values.get(k, 0) == 1]
+    detected_safe  = [desc for k, desc in safe_map.items() if values.get(k, 0) == 1]
     risk_cnt = len(detected_risks)
     safe_cnt = len(detected_safe)
 
-    # ── CCL 허용 케이스 특별 처리 ──
     if is_ccl and prediction == 1:
-        ccl_base = "CCL(크리에이티브 챌린저스 리그)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
-        safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
-        return f"{ccl_base}\n· {safe_detail}"
+        base = "CCL(크리에이티브 챌린저스 리그)은 회사가 운영하는 공식 프로그램으로 원칙적으로 허용 범주에 해당함"
+        detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
+        return f"{base}\n· {detail}"
 
-    # ── 비허용 판단 ──
     if prediction == 0:
-        if model_name == "Random Forest":
-            base = f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치"
-        elif model_name == "Logistic Regression":
-            base = f"위험 변수들의 누적 가중치가 허용 임계값을 초과 (감지된 위험지표 {risk_cnt}개)"
-        elif model_name == "Neural Network":
-            base = f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출"
-        elif model_name == "SVM":
-            base = f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)"
-        else:
-            base = f"단계적 부스팅 분석 결과 비허용 특성 패턴이 강하게 감지됨"
-
-        if detected_risks:
-            detail_lines = "\n· ".join([desc for _, (_, desc) in detected_risks])
-            return f"{base}\n· {detail_lines}"
-        else:
-            return f"{base}\n· 복합적 위험 요인의 조합이 비허용 기준에 해당"
-
-    # ── 허용 판단 ──
+        base_map = {
+            "Random Forest":      f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치",
+            "Logistic Regression": f"위험 변수들의 누적 가중치가 허용 임계값을 초과 (감지된 위험지표 {risk_cnt}개)",
+            "Neural Network":     f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출",
+            "SVM":                f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)",
+            "Gradient Boosting":  "단계적 부스팅 분석 결과 비허용 특성 패턴이 강하게 감지됨",
+        }
+        base = base_map.get(model_name, "비허용 패턴 감지")
+        detail = "\n· ".join(detected_risks) if detected_risks else "복합적 위험 요인의 조합이 비허용 기준에 해당"
+        return f"{base}\n· {detail}"
     else:
-        if model_name == "Random Forest":
-            base = f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)"
-        elif model_name == "Logistic Regression":
-            base = f"위험 변수의 가중합이 허용 범위 내에 있으며 주요 위험 요인 미해당"
-        elif model_name == "Neural Network":
-            base = f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출"
-        elif model_name == "SVM":
-            base = f"결정 경계 분석 결과 허용 영역으로 분류"
-        else:
-            base = f"단계적 부스팅 분석 결과 허용 패턴이 우세하게 감지됨"
-
-        safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
-        return f"{base}\n· {safe_detail}"
+        base_map = {
+            "Random Forest":      f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)",
+            "Logistic Regression": "위험 변수의 가중합이 허용 범위 내에 있으며 주요 위험 요인 미해당",
+            "Neural Network":     f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출",
+            "SVM":                "결정 경계 분석 결과 허용 영역으로 분류",
+            "Gradient Boosting":  "단계적 부스팅 분석 결과 허용 패턴이 우세하게 감지됨",
+        }
+        base = base_map.get(model_name, "허용 패턴 감지")
+        detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
+        return f"{base}\n· {detail}"
 
 # ─────────────────────────────────────────────
 # 4. 예측 함수
 # ─────────────────────────────────────────────
-def predict_all(model_data: dict, input_values: dict) -> pd.DataFrame:
+def predict_all(model_data, input_values):
     X = np.array([[input_values[c] for c in FEATURE_COLS]])
     allow_class = model_data["allow_class"]
     rows = []
@@ -258,21 +212,17 @@ def predict_all(model_data: dict, input_values: dict) -> pd.DataFrame:
         label = "✅ 허용" if pred == allow_class else "❌ 비허용"
         reason = generate_reason(name, input_values, 1 if pred == allow_class else 0, allow_prob)
         rows.append({
-            "모델": name,
-            "판정": label,
-            "허용 확률": f"{allow_prob:.1%}",
-            "비허용 확률": f"{deny_prob:.1%}",
+            "모델": name, "판정": label,
+            "허용 확률": f"{allow_prob:.1%}", "비허용 확률": f"{deny_prob:.1%}",
             "정확도(테스트셋)": f"{info['accuracy']}%",
             "판단 근거": reason,
-            "_pred": pred,
-            "_allow_class": allow_class,
         })
     return pd.DataFrame(rows)
 
 # ─────────────────────────────────────────────
-# 5. 종합 의견 생성
+# 5. 종합 의견
 # ─────────────────────────────────────────────
-def get_summary(result_df: pd.DataFrame) -> tuple:
+def get_summary(result_df):
     allow_cnt = (result_df["판정"].str.contains("허용") & ~result_df["판정"].str.contains("비허용")).sum()
     deny_cnt  = 5 - allow_cnt
     if deny_cnt == 5:
@@ -289,7 +239,22 @@ def get_summary(result_df: pd.DataFrame) -> tuple:
         return "🟢 종합 허용 — 전원 허용 판정", "allow"
 
 # ─────────────────────────────────────────────
-# 6. UI 메인
+# 6. 심사 기록 저장/불러오기 (세션 영구 누적)
+# ─────────────────────────────────────────────
+RECORD_FILE = "심사기록.json"
+
+def load_records():
+    if os.path.exists(RECORD_FILE):
+        with open(RECORD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_records(records):
+    with open(RECORD_FILE, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False, indent=2)
+
+# ─────────────────────────────────────────────
+# 7. UI 메인
 # ─────────────────────────────────────────────
 st.markdown('<div class="main-title">🏢 겸업 심사 AI 예측 시스템</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">HR 담당자용 · 5개 AI 모델 동시 예측 · 겸업 허용/비허용 판단 지원</div>', unsafe_allow_html=True)
@@ -298,71 +263,63 @@ st.markdown('<div class="sub-title">HR 담당자용 · 5개 AI 모델 동시 예
 with st.spinner("AI 모델 준비 중..."):
     try:
         model_data = load_or_train_models()
-        st.success(f"✅ 5개 모델 준비 완료")
+        st.success("✅ 5개 모델 준비 완료")
     except Exception as e:
         st.error(f"모델 로드 실패: {e}\n\n`학습데이터.csv` 파일이 앱과 같은 폴더에 있는지 확인해주세요.")
         st.stop()
 
-# 사이드바: 기본 정보
-with st.sidebar:
-    st.header("📋 심사 기본 정보")
-    emp_name    = st.text_input("성명", placeholder="홍길동")
-    emp_dept    = st.text_input("부서", placeholder="인사팀")
-    emp_pos     = st.text_input("호칭", placeholder="매니저")
-    side_job    = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
-    review_date = st.date_input("심사 일자")
-    st.markdown("**겸업 기간**")
-    col_s, col_e = st.columns(2)
-    with col_s:
-        period_start = st.date_input("시작일", key="period_start", label_visibility="collapsed")
-    with col_e:
-        period_end   = st.date_input("종료일", key="period_end",   label_visibility="collapsed")
-    if period_start > period_end:
-        st.warning("⚠️ 종료일이 시작일보다 앞서 있어요.")
-    elif period_start == period_end:
-        st.caption("📅 당일 겸업 (시작일 = 종료일)")
-    st.divider()
-    st.caption("※ 본 시스템은 AI 보조 도구이며\n최종 판단은 HR 담당자가 수행합니다.")
+# 탭 구성
+tab1, tab2 = st.tabs(["🔍 겸업 심사", "📋 심사 기록 보드"])
 
-# 입력폼
-st.markdown("---")
-st.markdown("### 📝 40개 진단항목 입력")
-st.caption("각 항목에 대해 **예(해당)** 또는 **아니오(미해당)** 를 선택해주세요.")
+# ══════════════════════════════════════════════
+# TAB 1 — 겸업 심사
+# ══════════════════════════════════════════════
+with tab1:
+    # 사이드바
+    with st.sidebar:
+        st.header("📋 심사 기본 정보")
+        emp_name    = st.text_input("성명", placeholder="홍길동")
+        emp_dept    = st.text_input("부서", placeholder="인사팀")
+        emp_pos     = st.text_input("호칭", placeholder="매니저")
+        side_job    = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
+        review_date = st.date_input("심사 일자")
+        st.markdown("**겸업 기간**")
+        col_s, col_e = st.columns(2)
+        with col_s:
+            period_start = st.date_input("시작일", key="period_start", label_visibility="collapsed")
+        with col_e:
+            period_end   = st.date_input("종료일", key="period_end",   label_visibility="collapsed")
+        if period_start > period_end:
+            st.warning("⚠️ 종료일이 시작일보다 앞서 있어요.")
+        elif period_start == period_end:
+            st.caption("📅 당일 겸업 (시작일 = 종료일)")
+        st.divider()
+        st.caption("※ 본 시스템은 AI 보조 도구이며\n최종 판단은 HR 담당자가 수행합니다.")
 
-input_values = {}
-current_section = ""
+    # 입력폼
+    st.markdown("### 📝 40개 진단항목 입력")
+    st.caption("각 항목에 대해 **예(해당)** 또는 **아니오(미해당)** 를 선택해주세요.")
+    input_values = {}
+    current_section = ""
+    for (section, col_id, question) in ITEMS:
+        if section != current_section:
+            current_section = section
+            st.markdown(f'<div class="section-header">📌 {section}</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.markdown(f"**{col_id}** {question}")
+        with c2:
+            val = st.radio(col_id, ["아니오", "예"], index=0, key=col_id,
+                           label_visibility="collapsed", horizontal=True)
+        input_values[col_id] = 1 if val == "예" else 0
 
-for (section, col_id, question) in ITEMS:
-    if section != current_section:
-        current_section = section
-        st.markdown(f'<div class="section-header">📌 {section}</div>', unsafe_allow_html=True)
+    # 예측 버튼
+    st.markdown("---")
+    _, btn_col, _ = st.columns([1, 2, 1])
+    with btn_col:
+        run = st.button("🔍 5개 모델 동시 예측 실행", use_container_width=True, type="primary")
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown(f"**{col_id}** {question}")
-    with col2:
-        val = st.radio(
-            label=col_id,
-            options=["아니오", "예"],
-            index=0,
-            key=col_id,
-            label_visibility="collapsed",
-            horizontal=True,
-        )
-    input_values[col_id] = 1 if val == "예" else 0
-
-# 예측 버튼
-st.markdown("---")
-col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-with col_btn2:
-    run = st.button("🔍 5개 모델 동시 예측 실행", use_container_width=True, type="primary")
-
-if run:
-    # 유효성 체크
-    total_yes = sum(input_values.values())
-    if total_yes == 0:
-        st.warning("⚠️ 모든 항목이 '아니오'입니다. 입력 내용을 확인해주세요.")
-    else:
+    if run:
         with st.spinner("AI 모델 분석 중..."):
             result_df = predict_all(model_data, input_values)
             summary_text, summary_type = get_summary(result_df)
@@ -370,15 +327,16 @@ if run:
         st.markdown("---")
         st.markdown("## 📊 예측 결과")
 
-        # 기본 정보 출력
-        if emp_name or emp_dept:
-            info_cols = st.columns(5)
-            with info_cols[0]: st.metric("성명", emp_name or "-")
-            with info_cols[1]: st.metric("부서", emp_dept or "-")
-            with info_cols[2]: st.metric("호칭", emp_pos or "-")
-            with info_cols[3]: st.metric("겸업 내용", side_job or "-")
-            with info_cols[4]: st.metric("겸업 기간", f"{period_start} ~ {period_end}")
-            st.divider()
+        # 기본 정보 (작은 바 형태)
+        st.markdown(f"""
+        <div class="info-bar">
+            <span><b>성명</b>{emp_name or '-'}</span>
+            <span><b>부서</b>{emp_dept or '-'}</span>
+            <span><b>호칭</b>{emp_pos or '-'}</span>
+            <span><b>겸업내용</b>{side_job or '-'}</span>
+            <span><b>겸업기간</b>{period_start} ~ {period_end}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
         # 종합 의견
         if summary_type == "deny":
@@ -388,69 +346,51 @@ if run:
         else:
             st.markdown(f'<div class="allow-box">{summary_text}</div>', unsafe_allow_html=True)
 
+        # 모델별 결과 테이블
         st.markdown("### 🤖 모델별 판정 결과")
-
-        # 결과 테이블 (판단 근거 제외)
         display_df = result_df[["모델", "판정", "허용 확률", "비허용 확률", "정확도(테스트셋)"]].copy()
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "판정": st.column_config.TextColumn("판정", width="small"),
-                "모델": st.column_config.TextColumn("모델", width="medium"),
-            }
-        )
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        # 판단 근거 (확장 패널)
+        # 판단 근거
         st.markdown("### 💬 모델별 판단 근거")
         for _, row in result_df.iterrows():
-            color = "🟢" if "허용" in row["판정"] and "비" not in row["판정"] else "🔴"
-            with st.expander(f"{color} {row['모델']} — {row['판정']}  ({row['허용 확률']} 허용 확률)"):
+            icon = "🟢" if "비" not in row["판정"] else "🔴"
+            with st.expander(f"{icon} {row['모델']} — {row['판정']}  ({row['허용 확률']} 허용 확률)"):
                 st.text(row["판단 근거"])
 
-        # 입력 요약 (해당 항목만 표시)
-        yes_items = [(col_id, q) for (_, col_id, q) in ITEMS if input_values.get(col_id, 0) == 1]
+        # 예 응답 요약
+        yes_items = [(cid, q) for (_, cid, q) in ITEMS if input_values.get(cid, 0) == 1]
         if yes_items:
             with st.expander(f"📋 '예' 응답 항목 요약 ({len(yes_items)}개)"):
-                for col_id, q in yes_items:
-                    st.markdown(f"- **{col_id}**: {q}")
+                for cid, q in yes_items:
+                    st.markdown(f"- **{cid}**: {q}")
 
-        # 결과 다운로드
+        # 결과 CSV 다운로드
         st.markdown("---")
         export_df = result_df[["모델", "판정", "허용 확률", "비허용 확률", "판단 근거"]].copy()
         export_df.loc[len(export_df)] = ["[종합]", summary_text, "", "", ""]
         csv_bytes = export_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-        st.download_button(
-            label="📥 결과 CSV 다운로드",
-            data=csv_bytes,
-            file_name=f"겸업심사결과_{emp_name or '미입력'}_{review_date}.csv",
-            mime="text/csv",
-        )
+        st.download_button("📥 결과 CSV 다운로드", data=csv_bytes,
+                           file_name=f"겸업심사결과_{emp_name or '미입력'}_{review_date}.csv",
+                           mime="text/csv")
 
-        # ── 심사 기록 보드 ──────────────────────────────
+        # ── 심사 기록 저장 폼 ──
         st.markdown("---")
-        st.markdown("## 📋 심사 기록 보드")
-        st.caption("AI 예측 결과를 참고하여 HR 담당자가 최종 판단을 기록해주세요.")
-
+        st.markdown("## 📋 최종 판단 기록")
+        st.caption("AI 예측 결과를 참고하여 HR 담당자가 최종 판단을 입력 후 저장해주세요.")
         with st.form("record_form"):
-            rec_cols = st.columns([1, 1])
-            with rec_cols[0]:
-                final_decision = st.radio(
-                    "최종 결과",
-                    options=["✅ 허용", "❌ 비허용", "🟡 조건부 허용"],
-                    index=0,
-                )
-            with rec_cols[1]:
+            rc1, rc2 = st.columns([1, 1])
+            with rc1:
+                final_decision = st.radio("최종 결과",
+                    options=["✅ 허용", "❌ 비허용", "🟡 조건부 허용"], index=0)
+            with rc2:
                 reviewer = st.text_input("심사담당자 성명", placeholder="김인사")
             remark = st.text_area("비고", placeholder="예) 겸업 기간 한정 허용, 분기별 재심사 조건 등", height=80)
-            submitted = st.form_submit_button("💾 기록 저장", use_container_width=True, type="primary")
+            save_btn = st.form_submit_button("💾 기록 저장", use_container_width=True, type="primary")
 
-        if "records" not in st.session_state:
-            st.session_state.records = []
-
-        if submitted:
-            st.session_state.records.append({
+        if save_btn:
+            new_rec = {
+                "심사일자":       str(review_date),
                 "성명":           emp_name or "-",
                 "호칭":           emp_pos or "-",
                 "겸업내용":       side_job or "-",
@@ -459,24 +399,49 @@ if run:
                 "최종결과":       final_decision,
                 "비고":           remark or "-",
                 "심사담당자":     reviewer or "-",
-            })
-            st.success("✅ 기록이 저장되었습니다!")
+            }
+            records = load_records()
+            records.append(new_rec)
+            save_records(records)
+            st.success("✅ 기록이 저장되었습니다! '심사 기록 보드' 탭에서 확인하세요.")
 
-        # 기록 목록 표시
-        if st.session_state.records:
-            st.markdown("### 📑 누적 심사 기록")
-            records_df = pd.DataFrame(st.session_state.records)
-            st.dataframe(records_df, use_container_width=True, hide_index=True)
+# ══════════════════════════════════════════════
+# TAB 2 — 심사 기록 보드
+# ══════════════════════════════════════════════
+with tab2:
+    st.markdown("### 📑 누적 심사 기록")
+    records = load_records()
 
-            # 기록 CSV 다운로드
-            rec_csv = records_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-            st.download_button(
-                label="📥 심사 기록 전체 다운로드",
-                data=rec_csv,
-                file_name=f"겸업심사_기록부_{review_date}.csv",
-                mime="text/csv",
-            )
-            # 기록 초기화
-            if st.button("🗑️ 기록 전체 초기화"):
-                st.session_state.records = []
-                st.rerun()
+    if not records:
+        st.info("아직 저장된 심사 기록이 없습니다. 겸업 심사 탭에서 기록을 저장해주세요.")
+    else:
+        records_df = pd.DataFrame(records)
+        # 컬럼 순서 정렬
+        col_order = ["심사일자", "성명", "호칭", "겸업내용", "겸업기간",
+                     "AI심사종합결과", "최종결과", "비고", "심사담당자"]
+        records_df = records_df[[c for c in col_order if c in records_df.columns]]
+        st.dataframe(records_df, use_container_width=True, hide_index=True)
+
+        # 통계 요약
+        st.markdown("---")
+        st.markdown("#### 📊 심사 통계")
+        stat_cols = st.columns(3)
+        with stat_cols[0]:
+            st.metric("전체 심사 건수", len(records_df))
+        with stat_cols[1]:
+            allow_n = records_df["최종결과"].str.contains("허용").sum()
+            st.metric("허용", allow_n)
+        with stat_cols[2]:
+            deny_n = records_df["최종결과"].str.contains("비허용").sum()
+            st.metric("비허용", deny_n)
+
+        # 전체 기록 다운로드
+        st.markdown("---")
+        rec_csv = records_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+        st.download_button("📥 전체 기록 CSV 다운로드", data=rec_csv,
+                           file_name="겸업심사_기록부.csv", mime="text/csv")
+
+        # 기록 초기화
+        if st.button("🗑️ 전체 기록 초기화", type="secondary"):
+            save_records([])
+            st.rerun()
