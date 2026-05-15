@@ -474,50 +474,78 @@ with tab2:
         display_df = records_df[[c for c in col_order if c in records_df.columns]].copy()
         display_df = display_df.rename(columns=col_rename)
 
-        # 체크박스로 행 선택 삭제
+        # 체크박스 + 테이블 통합
         st.caption("삭제할 행을 체크하고 '선택 삭제' 버튼을 눌러주세요.")
         delete_ids = []
+
+        # 헤더
+        h0, h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns([0.3,0.8,0.6,0.5,1,1.2,1.5,0.8,1.2,0.8])
+        with h0: st.markdown("<small>**선택**</small>", unsafe_allow_html=True)
+        with h1: st.markdown("<small>**심사일자**</small>", unsafe_allow_html=True)
+        with h2: st.markdown("<small>**성명**</small>", unsafe_allow_html=True)
+        with h3: st.markdown("<small>**호칭**</small>", unsafe_allow_html=True)
+        with h4: st.markdown("<small>**겸업내용**</small>", unsafe_allow_html=True)
+        with h5: st.markdown("<small>**겸업기간**</small>", unsafe_allow_html=True)
+        with h6: st.markdown("<small>**AI심사종합결과**</small>", unsafe_allow_html=True)
+        with h7: st.markdown("<small>**최종결과**</small>", unsafe_allow_html=True)
+        with h8: st.markdown("<small>**비고**</small>", unsafe_allow_html=True)
+        with h9: st.markdown("<small>**심사담당자**</small>", unsafe_allow_html=True)
+        st.divider()
+
         for i, row in records_df.iterrows():
-            name_val = row.get("name", "-")
-            date_val = row.get("review_date", "-")
-            job_val  = row.get("job_content", "-")
-            chk = st.checkbox(
-                f"**{date_val}** | {name_val} | {job_val}",
-                key=f"chk_{row['id']}"
-            )
+            c0, c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns([0.3,0.8,0.6,0.5,1,1.2,1.5,0.8,1.2,0.8])
+            with c0:
+                chk = st.checkbox("", key=f"chk_{row['id']}", label_visibility="collapsed")
+            with c1: st.markdown(f"<small>{row.get('review_date','-')}</small>", unsafe_allow_html=True)
+            with c2: st.markdown(f"<small>{row.get('name','-')}</small>", unsafe_allow_html=True)
+            with c3: st.markdown(f"<small>{row.get('title','-')}</small>", unsafe_allow_html=True)
+            with c4: st.markdown(f"<small>{row.get('job_content','-')}</small>", unsafe_allow_html=True)
+            with c5: st.markdown(f"<small>{row.get('job_period','-')}</small>", unsafe_allow_html=True)
+            with c6: st.markdown(f"<small>{row.get('ai_result','-')}</small>", unsafe_allow_html=True)
+            with c7: st.markdown(f"<small>{row.get('final_result','-')}</small>", unsafe_allow_html=True)
+            with c8: st.markdown(f"<small>{row.get('remark','-')}</small>", unsafe_allow_html=True)
+            with c9: st.markdown(f"<small>{row.get('reviewer','-')}</small>", unsafe_allow_html=True)
             if chk:
                 delete_ids.append(row["id"])
 
         st.markdown("---")
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        # 버튼 행
-        btn1, btn2, btn3 = st.columns([1, 1, 1])
-        with btn1:
-            if st.button("🗑️ 선택 삭제", type="primary", use_container_width=True):
-                if delete_ids:
-                    try:
-                        sb = get_supabase()
-                        for did in delete_ids:
-                            sb.table("Records").delete().eq("id", did).execute()
-                        st.success(f"✅ {len(delete_ids)}건 삭제 완료!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"삭제 실패: {e}")
-                else:
-                    st.warning("삭제할 항목을 체크해주세요.")
-        with btn2:
+        # 버튼 (작게)
+        st.markdown("""
+        <style>
+        div[data-testid="stHorizontalBlock"] button[kind="primaryFormSubmit"],
+        .small-btn button { font-size: 0.7rem !important; padding: 0.2rem 0.4rem !important; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        _, b1, _, b2, _, b3, _ = st.columns([2,1,0.2,1,0.2,1,2])
+        with b1:
+            del_btn = st.button("🗑️ 선택 삭제", type="primary", use_container_width=True)
+        with b2:
             rec_csv = display_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-            st.download_button("📥 전체 기록 CSV 저장",
-                               data=rec_csv,
+            st.download_button("📥 CSV 저장", data=rec_csv,
                                file_name="겸업심사_기록부.csv",
-                               mime="text/csv",
-                               use_container_width=True)
-        with btn3:
-            if st.button("🗑️ 전체 초기화", type="secondary", use_container_width=True):
-                if delete_all_records():
-                    st.success("초기화 완료!")
+                               mime="text/csv", use_container_width=True)
+        with b3:
+            clr_btn = st.button("🗑️ 전체 초기화", type="secondary", use_container_width=True)
+
+        if del_btn:
+            if delete_ids:
+                try:
+                    sb = get_supabase()
+                    for did in delete_ids:
+                        sb.table("Records").delete().eq("id", did).execute()
+                    st.success(f"✅ {len(delete_ids)}건 삭제 완료!")
                     st.rerun()
+                except Exception as e:
+                    st.error(f"삭제 실패: {e}")
+            else:
+                st.warning("삭제할 항목을 체크해주세요.")
+
+        if clr_btn:
+            if delete_all_records():
+                st.success("초기화 완료!")
+                st.rerun()
 
         # 통계
         st.markdown("---")
