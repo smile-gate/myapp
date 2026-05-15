@@ -354,8 +354,8 @@ with tab1:
         st.session_state["emp_pos"]      = emp_pos
         st.session_state["side_job"]     = side_job
         st.session_state["review_date"]  = review_date
-        st.session_state["period_start"] = period_start
-        st.session_state["period_end"]   = period_end
+        st.session_state["s_period_start"] = period_start
+        st.session_state["s_period_end"]   = period_end
 
     # 결과 표시 (session_state 기반 → 기록 저장 후에도 유지)
     if "result_df" in st.session_state:
@@ -367,8 +367,8 @@ with tab1:
         emp_pos      = st.session_state["emp_pos"]
         side_job     = st.session_state["side_job"]
         review_date  = st.session_state["review_date"]
-        period_start = st.session_state["period_start"]
-        period_end   = st.session_state["period_end"]
+        period_start = st.session_state["s_period_start"]
+        period_end   = st.session_state["s_period_end"]
 
         st.markdown("---")
         st.markdown("## 📊 예측 결과")
