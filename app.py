@@ -168,8 +168,16 @@ def generate_reason(model_name, values, prediction, proba):
         "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
     checked_keys   = {k for k, v in values.items() if v == 1}
-    detected_risks = [desc for k, desc in risk_map.items() if k in checked_keys]
-    detected_safe  = [desc for k, desc in safe_map.items() if k in checked_keys]
+
+    # 휴직/모성제도 중이면 업무시간 관련 사유 제외
+    is_leave = values.get("진단항목39", 0) == 1 or values.get("진단항목40", 0) == 1
+    time_related = {"진단항목10", "진단항목11", "진단항목12", "진단항목13",
+                    "진단항목14", "진단항목15", "진단항목16", "진단항목17", "진단항목18"}
+
+    detected_risks = [desc for k, desc in risk_map.items()
+                      if k in checked_keys and not (is_leave and k in time_related)]
+    detected_safe  = [desc for k, desc in safe_map.items()
+                      if k in checked_keys and not (is_leave and k in time_related)]
     risk_cnt = len(detected_risks)
     safe_cnt = len(detected_safe)
 
