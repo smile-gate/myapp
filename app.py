@@ -154,70 +154,93 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
     """
     입력값 패턴을 분석하여 모델별 판단 근거를 자연어로 생성
     """
-    deny_flags = []
-    allow_flags = []
 
-    # 핵심 위험 항목 체크
+    # CCL 여부 판단 (8번 또는 9번 해당)
+    is_ccl = values.get("진단항목8", 0) == 1 or values.get("진단항목9", 0) == 1
+
+    # 위험 항목 감지
     risk_map = {
-        "진단항목13": "평일 코어타임 겸업",
-        "진단항목16": "정기적 연차 사용",
-        "진단항목18": "직무능률 저하 우려",
-        "진단항목19": "회사 이익 상충",
-        "진단항목22": "직무 습득 자산 활용",
-        "진단항목23": "영업비밀 활용",
-        "진단항목24": "경쟁업체 관련",
-        "진단항목25": "회사 손실 우려",
-        "진단항목27": "회사 자산 활용",
-        "진단항목36": "타인 명의 운영",
-        "진단항목37": "이중취업",
-        "진단항목38": "병가/휴직 중 겸업",
+        "진단항목13": ("평일 코어타임 겸업 활동",
+                      "평일 업무 코어시간과 겸업 시간이 중복되어 본업 집중도에 영향을 줄 수 있음"),
+        "진단항목16": ("정기적 연차 사용",
+                      "겸업을 위해 연차를 정기적으로 활용하는 패턴은 본업 운영에 구조적 부담을 초래할 수 있음"),
+        "진단항목18": ("직무능률 저하 우려",
+                      "겸업 활동이 본업 수행 역량에 실질적인 영향을 미칠 가능성이 있음"),
+        "진단항목19": ("회사 이익 상충 우려",
+                      "겸업 활동의 성격이 회사 이익과 상반되는 방향으로 전개될 여지가 있음"),
+        "진단항목22": ("직무 습득 자산 활용",
+                      "본업을 통해 획득한 기술이나 지식이 겸업에 직접 활용되는 구조로 이해충돌 소지가 있음"),
+        "진단항목23": ("영업비밀 활용 가능성",
+                      "회사의 원천 기술 또는 영업비밀이 겸업 활동에 연계될 우려가 있음"),
+        "진단항목24": ("경쟁업체 연관성",
+                      "동종 업계 또는 경쟁 관계에 있는 업체와의 겸업은 정보 유출 및 이해충돌 위험이 높음"),
+        "진단항목25": ("회사 손실 우려",
+                      "겸업을 통해 생성되는 결과물이나 정보가 회사에 불이익을 줄 가능성이 있음"),
+        "진단항목27": ("회사 자산 활용",
+                      "회사 소유 자산이나 시설이 겸업에 사용될 경우 자산 보호 및 내부 통제 관점에서 문제가 될 수 있음"),
+        "진단항목36": ("타인 명의 운영",
+                      "실질적 운영자와 명의자가 다른 구조는 투명성 측면에서 허용 기준에 부합하지 않음"),
+        "진단항목37": ("이중취업 형태",
+                      "4대보험 취득이 수반되는 이중취업은 취업규칙상 겸업 금지 조항에 직접 저촉됨"),
+        "진단항목38": ("병가/휴직 중 겸업",
+                      "휴직 사유와 겸업 활동 간의 불일치는 휴직 목적에 반하는 행위로 간주될 수 있음"),
     }
+
     safe_map = {
-        "진단항목10": "업무시간 외 활동",
-        "진단항목14": "주말 활동",
-        "진단항목34": "일회성 소득",
-        "진단항목7":  "개인 봉사/취미 활동",
-        "진단항목5":  "일회성 외부 출강",
+        "진단항목10": "업무시간 외 활동으로 본업과 시간적 충돌 없음",
+        "진단항목14": "주말 중심의 활동으로 평일 업무 영향 최소화",
+        "진단항목34": "일회성 소득으로 지속적 겸업 구조 아님",
+        "진단항목7":  "봉사·취미 등 비영리적 개인 활동",
+        "진단항목5":  "일회성 외부 출강으로 정기 겸업과 구분됨",
+        "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
+        "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
 
-    for k, label in risk_map.items():
-        if values.get(k, 0) == 1:
-            deny_flags.append(label)
-    for k, label in safe_map.items():
-        if values.get(k, 0) == 1:
-            allow_flags.append(label)
+    detected_risks = [(k, v) for k, v in risk_map.items() if values.get(k, 0) == 1]
+    detected_safe  = [v for k, v in safe_map.items() if values.get(k, 0) == 1]
+    risk_cnt = len(detected_risks)
+    safe_cnt = len(detected_safe)
 
-    risk_cnt = len(deny_flags)
-    safe_cnt = len(allow_flags)
+    # ── CCL 허용 케이스 특별 처리 ──
+    if is_ccl and prediction == 1:
+        ccl_base = "CCL(크리에이티브 챌린저스 리그)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
+        safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
+        return f"{ccl_base}\n· {safe_detail}"
 
-    if prediction == 0:  # 비허용
+    # ── 비허용 판단 ──
+    if prediction == 0:
         if model_name == "랜덤 포레스트":
-            base = f"다수의 결정 트리 분석 결과, 위험 지표 {risk_cnt}개 감지"
+            base = f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치"
         elif model_name == "로지스틱 회귀":
-            base = f"위험 변수들의 가중합이 비허용 임계값 초과 (위험지표 {risk_cnt}개)"
+            base = f"위험 변수들의 누적 가중치가 허용 임계값을 초과 (감지된 위험지표 {risk_cnt}개)"
         elif model_name == "뉴럴 네트워크":
-            base = f"복합 패턴 학습 결과, 비허용 확률 {proba:.0%} 도출"
+            base = f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출"
         elif model_name == "SVM":
-            base = f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개)"
+            base = f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)"
         else:
-            base = f"단계적 부스팅 분석 결과 비허용 패턴 강하게 감지"
+            base = f"단계적 부스팅 분석 결과 비허용 특성 패턴이 강하게 감지됨"
 
-        detail = "· " + "\n· ".join(deny_flags) if deny_flags else "· 복합적 위험 요인 존재"
-        return f"{base}\n{detail}"
-    else:  # 허용
+        if detected_risks:
+            detail_lines = "\n· ".join([desc for _, (_, desc) in detected_risks])
+            return f"{base}\n· {detail_lines}"
+        else:
+            return f"{base}\n· 복합적 위험 요인의 조합이 비허용 기준에 해당"
+
+    # ── 허용 판단 ──
+    else:
         if model_name == "랜덤 포레스트":
-            base = f"다수의 결정 트리 분석 결과, 허용 지표 우세 (안전지표 {safe_cnt}개)"
+            base = f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)"
         elif model_name == "로지스틱 회귀":
-            base = f"위험 변수 가중합이 허용 범위 내 (허용지표 {safe_cnt}개)"
+            base = f"위험 변수의 가중합이 허용 범위 내에 있으며 주요 위험 요인 미해당"
         elif model_name == "뉴럴 네트워크":
-            base = f"복합 패턴 학습 결과, 허용 확률 {proba:.0%} 도출"
+            base = f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출"
         elif model_name == "SVM":
             base = f"결정 경계 분석 결과 허용 영역으로 분류"
         else:
-            base = f"단계적 부스팅 분석 결과 허용 패턴 감지"
+            base = f"단계적 부스팅 분석 결과 허용 패턴이 우세하게 감지됨"
 
-        detail = "· " + "\n· ".join(allow_flags) if allow_flags else "· 주요 위험 요인 미해당"
-        return f"{base}\n{detail}"
+        safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
+        return f"{base}\n· {safe_detail}"
 
 # ─────────────────────────────────────────────
 # 4. 예측 함수
