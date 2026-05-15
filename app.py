@@ -122,11 +122,11 @@ def load_or_train_models():
     )
 
     models = {
-        "랜덤 포레스트":    RandomForestClassifier(n_estimators=200, random_state=42),
-        "로지스틱 회귀":    LogisticRegression(max_iter=1000, random_state=42),
-        "뉴럴 네트워크":    MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
+        "Random Forest":    RandomForestClassifier(n_estimators=200, random_state=42),
+        "Logistic Regression":    LogisticRegression(max_iter=1000, random_state=42),
+        "Neural Network":    MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
         "SVM":             SVC(probability=True, random_state=42),
-        "그래디언트 부스팅": GradientBoostingClassifier(n_estimators=200, random_state=42),
+        "Gradient Boosting": GradientBoostingClassifier(n_estimators=200, random_state=42),
     }
 
     trained = {}
@@ -228,11 +228,11 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
 
     # ── 허용 판단 ──
     else:
-        if model_name == "랜덤 포레스트":
+        if model_name == "Random Forest":
             base = f"다수의 결정 트리 분석 결과 허용 지표 우세 (안전지표 {safe_cnt}개 확인)"
-        elif model_name == "로지스틱 회귀":
+        elif model_name == "Logistic Regression":
             base = f"위험 변수의 가중합이 허용 범위 내에 있으며 주요 위험 요인 미해당"
-        elif model_name == "뉴럴 네트워크":
+        elif model_name == "Neural Network":
             base = f"복합 입력 패턴 분석 결과 허용 확률 {proba:.0%} 산출"
         elif model_name == "SVM":
             base = f"결정 경계 분석 결과 허용 영역으로 분류"
@@ -308,7 +308,7 @@ with st.sidebar:
     st.header("📋 심사 기본 정보")
     emp_name   = st.text_input("성명", placeholder="홍길동")
     emp_dept   = st.text_input("부서", placeholder="인사팀")
-    emp_pos    = st.text_input("직급", placeholder="팀장")
+    emp_pos    = st.text_input("직급", placeholder="차장")
     side_job   = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
     review_date = st.date_input("심사 일자")
     st.divider()
