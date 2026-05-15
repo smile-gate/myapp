@@ -415,15 +415,15 @@ with tab1:
 
         if save_btn:
             new_rec = {
-                "심사일자":       str(review_date),
-                "성명":           emp_name or "-",
-                "호칭":           emp_pos or "-",
-                "겸업내용":       side_job or "-",
-                "겸업기간":       f"{period_start} ~ {period_end}",
-                "AI심사종합결과": summary_text,
-                "최종결과":       final_decision,
-                "비고":           remark or "-",
-                "심사담당자":     reviewer or "-",
+                "review_date": str(review_date),
+                "name":        emp_name or "-",
+                "title":       emp_pos or "-",
+                "job_content": side_job or "-",
+                "job_period":  f"{period_start} ~ {period_end}",
+                "ai_result":   summary_text,
+                "final_result": final_decision,
+                "remark":      remark or "-",
+                "reviewer":    reviewer or "-",
             }
             if save_records(new_rec):
                 st.success("✅ 기록이 저장되었습니다! '심사 기록 보드' 탭에서 확인하세요.")
@@ -439,9 +439,21 @@ with tab2:
         st.info("아직 저장된 심사 기록이 없습니다. 겸업 심사 탭에서 기록을 저장해주세요.")
     else:
         records_df = pd.DataFrame(records)
-        col_order = ["심사일자", "성명", "호칭", "겸업내용", "겸업기간",
-                     "AI심사종합결과", "최종결과", "비고", "심사담당자"]
+        # 영문 컬럼 → 한글 표시로 변환
+        col_rename = {
+            "review_date":  "심사일자",
+            "name":         "성명",
+            "title":        "호칭",
+            "job_content":  "겸업내용",
+            "job_period":   "겸업기간",
+            "ai_result":    "AI심사종합결과",
+            "final_result": "최종결과",
+            "remark":       "비고",
+            "reviewer":     "심사담당자",
+        }
+        col_order = list(col_rename.keys())
         records_df = records_df[[c for c in col_order if c in records_df.columns]]
+        records_df = records_df.rename(columns=col_rename)
         st.dataframe(records_df, use_container_width=True, hide_index=True)
 
         # 통계 요약
