@@ -471,23 +471,58 @@ with tab2:
             "reviewer":     "심사담당자",
         }
         col_order  = list(col_rename.keys())
-        records_df = records_df[[c for c in col_order if c in records_df.columns]]
-        records_df = records_df.rename(columns=col_rename)
-        st.dataframe(records_df, use_container_width=True, hide_index=True)
+        display_df = records_df[[c for c in col_order if c in records_df.columns]].copy()
+        display_df = display_df.rename(columns=col_rename)
 
+        # 체크박스로 행 선택 삭제
+        st.caption("삭제할 행을 체크하고 '선택 삭제' 버튼을 눌러주세요.")
+        delete_ids = []
+        for i, row in records_df.iterrows():
+            name_val = row.get("name", "-")
+            date_val = row.get("review_date", "-")
+            job_val  = row.get("job_content", "-")
+            chk = st.checkbox(
+                f"**{date_val}** | {name_val} | {job_val}",
+                key=f"chk_{row['id']}"
+            )
+            if chk:
+                delete_ids.append(row["id"])
+
+        st.markdown("---")
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        # 버튼 행
+        btn1, btn2, btn3 = st.columns([1, 1, 1])
+        with btn1:
+            if st.button("🗑️ 선택 삭제", type="primary", use_container_width=True):
+                if delete_ids:
+                    try:
+                        sb = get_supabase()
+                        for did in delete_ids:
+                            sb.table("Records").delete().eq("id", did).execute()
+                        st.success(f"✅ {len(delete_ids)}건 삭제 완료!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"삭제 실패: {e}")
+                else:
+                    st.warning("삭제할 항목을 체크해주세요.")
+        with btn2:
+            rec_csv = display_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+            st.download_button("📥 전체 기록 CSV 저장",
+                               data=rec_csv,
+                               file_name="겸업심사_기록부.csv",
+                               mime="text/csv",
+                               use_container_width=True)
+        with btn3:
+            if st.button("🗑️ 전체 초기화", type="secondary", use_container_width=True):
+                if delete_all_records():
+                    st.success("초기화 완료!")
+                    st.rerun()
+
+        # 통계
         st.markdown("---")
         st.markdown("#### 📊 심사 통계")
         s1, s2, s3 = st.columns(3)
-        with s1: st.metric("전체 심사 건수", len(records_df))
-        with s2: st.metric("허용", records_df["최종결과"].str.contains("허용").sum())
-        with s3: st.metric("비허용", records_df["최종결과"].str.contains("비허용").sum())
-
-        st.markdown("---")
-        rec_csv = records_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-        st.download_button("📥 전체 기록 CSV 다운로드", data=rec_csv,
-                           file_name="겸업심사_기록부.csv", mime="text/csv")
-
-        if st.button("🗑️ 전체 기록 초기화", type="secondary"):
-            if delete_all_records():
-                st.success("초기화 완료!")
-                st.rerun()
+        with s1: st.metric("전체 심사 건수", len(display_df))
+        with s2: st.metric("허용", (display_df["최종결과"] == "✅ 허용").sum() + (display_df["최종결과"] == "🟡 조건부 허용").sum())
+        with s3: st.metric("비허용", (display_df["최종결과"] == "❌ 비허용").sum())
