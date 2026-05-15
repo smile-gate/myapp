@@ -226,7 +226,9 @@ def predict_all(model_data, input_values):
         input_values.get("진단항목19", 0) == 1 or  # 회사 이익 상충
         input_values.get("진단항목23", 0) == 1 or  # 영업비밀 활용
         input_values.get("진단항목24", 0) == 1 or  # 경쟁업체 관련
-        input_values.get("진단항목25", 0) == 1     # 회사 손실 우려
+        input_values.get("진단항목25", 0) == 1 or  # 회사 손실 우려
+        input_values.get("진단항목29", 0) == 1 or  # 회사 명예 실추
+        input_values.get("진단항목30", 0) == 1     # 비밀 누설
     )
 
     for name, info in model_data["models"].items():
