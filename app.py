@@ -142,6 +142,7 @@ def generate_reason(model_name, values, prediction, proba):
     is_ccl = values.get("진단항목8", 0) == 1 or values.get("진단항목9", 0) == 1
     risk_map = {
         "진단항목13": "평일 코어타임 겸업 활동으로 본업 집중도에 영향을 줄 수 있음",
+        "진단항목15": "겸업을 위한 간헐적 연차 사용으로 본업 일정 운영에 영향을 줄 수 있음",
         "진단항목16": "겸업을 위해 연차를 정기적으로 활용하는 패턴은 본업 운영에 구조적 부담을 초래할 수 있음",
         "진단항목18": "겸업 활동이 본업 수행 역량에 실질적인 영향을 미칠 가능성이 있음",
         "진단항목19": "겸업 활동의 성격이 회사 이익과 상반되는 방향으로 전개될 여지가 있음",
@@ -158,13 +159,15 @@ def generate_reason(model_name, values, prediction, proba):
         "진단항목10": "업무시간 외 활동으로 본업과 시간적 충돌 없음",
         "진단항목14": "주말 중심의 활동으로 평일 업무 영향 최소화",
         "진단항목34": "일회성 소득으로 지속적 겸업 구조 아님",
-        "진단항목7":  "봉사·취미 등 비영리적 개인 활동",
+        "진단항목7":  "본업 외 개인 역량 기반의 외부 활동으로 직접적 이해충돌 가능성 낮음",
         "진단항목5":  "일회성 외부 출강으로 정기 겸업과 구분됨",
         "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
         "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
-    detected_risks = [desc for k, desc in risk_map.items() if values.get(k, 0) == 1]
-    detected_safe  = [desc for k, desc in safe_map.items() if values.get(k, 0) == 1]
+    # 실제 체크된 항목 기준으로만 필터링
+    checked_keys = {k for k, v in values.items() if v == 1}
+    detected_risks = [desc for k, desc in risk_map.items() if k in checked_keys]
+    detected_safe  = [desc for k, desc in safe_map.items() if k in checked_keys]
     risk_cnt = len(detected_risks)
     safe_cnt = len(detected_safe)
 
