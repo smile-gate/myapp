@@ -122,11 +122,11 @@ def load_or_train_models():
     )
 
     models = {
-        "Random Forest":    RandomForestClassifier(n_estimators=200, random_state=42),
-        "Logistic Regression":    LogisticRegression(max_iter=1000, random_state=42),
-        "Neural Network":    MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
-        "SVM":             SVC(probability=True, random_state=42),
-        "Gradient Boosting": GradientBoostingClassifier(n_estimators=200, random_state=42),
+        "Random Forest":      RandomForestClassifier(n_estimators=200, random_state=42),
+        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+        "Neural Network":     MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
+        "SVM":                SVC(probability=True, random_state=42),
+        "Gradient Boosting":  GradientBoostingClassifier(n_estimators=200, random_state=42),
     }
 
     trained = {}
@@ -192,8 +192,8 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
         "진단항목34": "일회성 소득으로 지속적 겸업 구조 아님",
         "진단항목7":  "봉사·취미 등 비영리적 개인 활동",
         "진단항목5":  "일회성 외부 출강으로 정기 겸업과 구분됨",
-        "진단항목8":  "CCL(Creative Challengers League) 활동으로 회사 승인 프로그램 해당",
-        "진단항목9":  "CCL(Creative Challengers League)연계 부속활동으로 회사 인정 범위 내 활동",
+        "진단항목8":  "CCL(크리에이티브 챌린저스 리그) 소속 활동으로 회사 승인 프로그램 해당",
+        "진단항목9":  "CCL 연계 부속활동으로 회사 인정 범위 내 활동",
     }
 
     detected_risks = [(k, v) for k, v in risk_map.items() if values.get(k, 0) == 1]
@@ -203,17 +203,17 @@ def generate_reason(model_name: str, values: dict, prediction: int, proba: float
 
     # ── CCL 허용 케이스 특별 처리 ──
     if is_ccl and prediction == 1:
-        ccl_base = "CCL(Creative Challengers League)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
+        ccl_base = "CCL(크리에이티브 챌린저스 리그)은 회사가 운영하는 공식 프로그램으로, 해당 활동은 원칙적으로 허용 범주에 해당함"
         safe_detail = "\n· ".join(detected_safe) if detected_safe else "주요 위험 요인 미해당"
         return f"{ccl_base}\n· {safe_detail}"
 
     # ── 비허용 판단 ──
     if prediction == 0:
-        if model_name == "랜덤 포레스트":
+        if model_name == "Random Forest":
             base = f"다수의 결정 트리 분석 결과, 핵심 위험 지표 {risk_cnt}개가 비허용 패턴과 일치"
-        elif model_name == "로지스틱 회귀":
+        elif model_name == "Logistic Regression":
             base = f"위험 변수들의 누적 가중치가 허용 임계값을 초과 (감지된 위험지표 {risk_cnt}개)"
-        elif model_name == "뉴럴 네트워크":
+        elif model_name == "Neural Network":
             base = f"복합 입력 패턴 분석 결과 비허용 확률 {proba:.0%} 산출"
         elif model_name == "SVM":
             base = f"결정 경계 분석 결과 비허용 영역으로 분류 (위험지표 {risk_cnt}개 반영)"
@@ -308,7 +308,7 @@ with st.sidebar:
     st.header("📋 심사 기본 정보")
     emp_name   = st.text_input("성명", placeholder="홍길동")
     emp_dept   = st.text_input("부서", placeholder="인사팀")
-    emp_pos    = st.text_input("직급", placeholder="차장")
+    emp_pos    = st.text_input("직급", placeholder="팀장")
     side_job   = st.text_input("겸업 내용", placeholder="유튜브 채널 운영")
     review_date = st.date_input("심사 일자")
     st.divider()
