@@ -220,13 +220,28 @@ def predict_all(model_data, input_values):
     X = np.array([[input_values[c] for c in FEATURE_COLS]])
     allow_class = model_data["allow_class"]
     rows = []
+
+    # 강제 비허용 조건 (모델 결과 무관하게 override)
+    force_deny = (
+        input_values.get("진단항목19", 0) == 1 or  # 회사 이익 상충
+        input_values.get("진단항목23", 0) == 1 or  # 영업비밀 활용
+        input_values.get("진단항목24", 0) == 1 or  # 경쟁업체 관련
+        input_values.get("진단항목25", 0) == 1     # 회사 손실 우려
+    )
+
     for name, info in model_data["models"].items():
         m = info["model"]
-        pred = int(m.predict(X)[0])
         proba_arr  = m.predict_proba(X)[0]
         allow_prob = proba_arr[allow_class]
         deny_prob  = 1 - allow_prob
-        label  = "✅ 허용" if pred == allow_class else "❌ 비허용"
+
+        if force_deny:
+            pred  = 1 - allow_class  # 비허용 강제
+            label = "❌ 비허용"
+        else:
+            pred  = int(m.predict(X)[0])
+            label = "✅ 허용" if pred == allow_class else "❌ 비허용"
+
         reason = generate_reason(name, input_values, 1 if pred == allow_class else 0, allow_prob)
         rows.append({
             "모델": name, "판정": label,
