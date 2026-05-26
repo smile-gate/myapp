@@ -262,9 +262,10 @@ def predict_all(model_data, input_values):
     X = np.array([[input_values[c] for c in FEATURE_COLS]])
     allow_class = model_data["allow_class"]
 
-    # ── 강제 비허용 조건 (항목 번호 변경 반영) ──
+    # ── 강제 비허용 조건 ──
+    # 학습 데이터와 무관하게 규정상 절대 비허용인 항목만 포함
+    # ※ 진단항목6(정치활동)은 학습 데이터에 허용 케이스가 있으므로 모델 예측에 위임
     force_deny = any([
-        input_values.get("진단항목6",  0) == 1,  # 정치활동 참여
         input_values.get("진단항목22", 0) == 1,  # 육체적 과도한 노동
         input_values.get("진단항목23", 0) == 1,  # 직무 능률 저하 우려
         input_values.get("진단항목24", 0) == 1,  # 회사 이익 상충
@@ -272,7 +273,7 @@ def predict_all(model_data, input_values):
         input_values.get("진단항목29", 0) == 1,  # 경쟁업체 관련
         input_values.get("진단항목30", 0) == 1,  # 회사 손실 우려
         input_values.get("진단항목31", 0) == 1,  # 주요 고객사 직접 계약
-        input_values.get("진단항목32", 0) == 1,  # 회사 자산 활용
+        # 진단항목32(회사 자산 활용)는 허용 케이스 존재 → 모델 예측에 위임
         input_values.get("진단항목33", 0) == 1,  # 회사 인력/네트워크 동원
         input_values.get("진단항목34", 0) == 1,  # 명예 실추 우려
         input_values.get("진단항목35", 0) == 1,  # 비밀 누설 우려
